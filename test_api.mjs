@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import {randomBytes} from 'node:crypto';
 import supabaseCA from './supabase-ca.mjs';
+import {attendanceException} from './attendance-rules.mjs';
+
+test('Baghdad shift boundaries use 09:00 and 17:00',()=>{
+  for(const [time,kind,expected] of [
+    ['08:59:59','in',''],['09:00:00','in',''],['09:00:01','in','late'],
+    ['16:59:59','out','early'],['17:00:00','out',''],['17:00:01','out',''],
+    ['23:30:00','in','late'],['00:30:00','out','early']
+  ]) assert.equal(attendanceException(kind,new Date('2026-11-18T'+time+'+03:00')),expected);
+});
 
 test('Netlify API: private accounts, attendance, persistence and QR',{skip:!process.env.INJAZ_TEST_DATABASE_URL},async()=>{
   const schema='injaz_test_'+randomBytes(5).toString('hex');
@@ -22,10 +31,17 @@ test('Netlify API: private accounts, attendance, persistence and QR',{skip:!proc
     response=await call('login',{code:'E1',password:'Staff-secret-123'});assert.equal(response.status,200);employeeCookie=response.headers.get('set-cookie').split(';')[0];
     assert.equal((await call('users',null,employeeCookie)).status,403);
     assert.equal((await call('attendance',{kind:'out'},employeeCookie)).status,409);
-    assert.equal((await call('attendance',{kind:'in'},employeeCookie)).status,200);
+    if(attendanceException('in'))assert.equal((await call('attendance',{kind:'in',note:'   '},employeeCookie)).status,400);
+    assert.equal((await call('attendance',{kind:'in',note:'Transport delay <test>'},employeeCookie)).status,200);
     assert.equal((await call('attendance',{kind:'in'},employeeCookie)).status,409);
-    assert.equal((await call('attendance',{kind:'out'},employeeCookie)).status,200);
-    assert.equal((await (await call('records',null,employeeCookie)).json()).length,2);
+    if(attendanceException('out'))assert.equal((await call('attendance',{kind:'out'},employeeCookie)).status,400);
+    assert.equal((await call('attendance',{kind:'out',note:'Medical appointment'},employeeCookie)).status,200);
+    const saved=await (await call('records',null,employeeCookie)).json();
+    assert.equal(saved.length,2);
+    assert.equal(saved[0].note,'Medical appointment');
+    assert.equal(saved[1].note,'Transport delay <test>');
+    assert.equal(saved[0].exception_type,attendanceException('out',new Date(saved[0].timestamp)));
+    assert.equal(saved[1].exception_type,attendanceException('in',new Date(saved[1].timestamp)));
     assert.equal((await call('settings',{url:'https://attendance.test'},adminCookie)).status,200);
     response=await call('qr',null,adminCookie);assert.equal(response.status,200);assert.match(await response.text(),/<svg/);
     const employee=(await (await call('users',null,adminCookie)).json()).find(u=>u.code==='E1');

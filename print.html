@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>إنجاز | طباعة رمز الحضور</title>
+<style>
+body{font:20px Tahoma,Arial,sans-serif;text-align:center;margin:0;color:#12323e;background:white}
+main{max-width:700px;margin:40px auto;padding:24px}h1{font-size:36px}p{line-height:1.8}
+#qr svg{width:330px;max-width:100%;height:auto;display:block;margin:20px auto}
+a{color:inherit;overflow-wrap:anywhere}button{font:inherit;padding:12px 25px;cursor:pointer}
+@page{size:A4;margin:18mm}
+@media print{.controls{display:none!important}main{margin:0 auto;padding:0;break-inside:avoid}body{color:black}}
+</style></head><body><main><h1>إنجاز • الحضور والانصراف</h1><p>امسح الرمز بكامرة موبايلك وسجّل دخولك بحساب الموظف</p><div id="qr"></div><a id="link" dir="ltr"></a><p>الدوام الرسمي من 9 صباحاً إلى 5 عصراً</p><p>اختر حضور أو انصراف بعد تسجيل الدخول</p><div class="controls"><p id="status" role="status">جاري تجهيز الباركود…</p><button id="print" disabled>طباعة الباركود</button></div></main>
+<script>
+async function load(){
+  try{
+    const settings=await fetch('/api/settings');if(!settings.ok)throw Error('سجّل دخولك بحساب المدير بالموقع، وبعدها افتح طباعة الرمز من جديد.');
+    const {url}=await settings.json();const response=await fetch('/api/qr');if(!response.ok)throw Error('تعذر تحميل الباركود. احفظ رابط النظام من لوحة الإدارة.');
+    const doc=new DOMParser().parseFromString(await response.text(),'image/svg+xml');
+    if(doc.documentElement.localName!=='svg')throw Error('تعذر قراءة الباركود.');
+    document.getElementById('qr').append(document.importNode(doc.documentElement,true));
+    const link=document.getElementById('link');link.textContent=url+'/attendance';link.href=url+'/attendance';
+    document.getElementById('print').disabled=false;document.getElementById('status').textContent='الباركود جاهز. اضغط الزر للطباعة أو الحفظ PDF.';
+  }catch(error){document.getElementById('status').textContent=error.message}
+}
+document.getElementById('print').onclick=()=>window.print();load();
+</script></body></html>

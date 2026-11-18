@@ -2,6 +2,7 @@ import pg from 'pg';
 import QRCode from 'qrcode';
 import {randomBytes, pbkdf2 as pbkdf2Callback, timingSafeEqual, createHash} from 'node:crypto';
 import {promisify} from 'node:util';
+import {attendanceException} from '../../attendance-rules.mjs';
 import supabaseCA from '../../supabase-ca.mjs';
 
 const pbkdf2 = promisify(pbkdf2Callback);
@@ -21,6 +22,8 @@ async function initialize(db){
     CREATE TABLE IF NOT EXISTS users(id BIGSERIAL PRIMARY KEY,code TEXT UNIQUE NOT NULL,name TEXT NOT NULL,department TEXT NOT NULL,password TEXT NOT NULL,admin INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL,expires DOUBLE PRECISION NOT NULL);
     CREATE TABLE IF NOT EXISTS records(id BIGSERIAL PRIMARY KEY,user_id INTEGER NOT NULL,kind TEXT NOT NULL,timestamp TEXT NOT NULL);
+    ALTER TABLE records ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';
+    ALTER TABLE records ADD COLUMN IF NOT EXISTS exception_type TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS login_attempts(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,started DOUBLE PRECISION NOT NULL);
     CREATE INDEX IF NOT EXISTS records_user_last ON records(user_id,id);
@@ -100,7 +103,11 @@ async function route(db,path,request,body,context){
     const last=(await db.query('SELECT kind FROM records WHERE user_id=$1 ORDER BY id DESC LIMIT 1',[user.id])).rows[0];
     if(last?.kind===kind||(!last&&kind==='out'))throw new ApiError(last?'الحركة مسجلة مسبقاً؛ اختر الحركة التالية.':'سجل حضورك أولاً.',409);
     const timestamp=new Date(Date.now()+3*3600000).toISOString().slice(0,19)+'+03:00';
-    await db.query('INSERT INTO records(user_id,kind,timestamp) VALUES($1,$2,$3)',[user.id,kind,timestamp]);return json({ok:true});
+    const note=typeof body.note==='string'?body.note.trim():'';
+    if(note.length>1000)throw new ApiError('الملاحظة يجب ألا تتجاوز 1000 حرف.');
+    const exception=attendanceException(kind,new Date(timestamp));
+    if(exception&&!note)throw new ApiError(exception==='late'?'اكتب سبب التأخير عن الساعة 9 صباحاً.':'اكتب سبب الانصراف المبكر قبل الساعة 5 عصراً.');
+    await db.query('INSERT INTO records(user_id,kind,timestamp,note,exception_type) VALUES($1,$2,$3,$4,$5)',[user.id,kind,timestamp,note,exception]);return json({ok:true});
   }
   if(!user.admin)throw new ApiError('هذه العملية للإدارة فقط.',403);
   if(request.method==='GET'&&path==='/api/users')return json((await db.query('SELECT id,code,name,department,admin FROM users ORDER BY id')).rows.map(profile));
