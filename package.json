@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4"
+  },
+  "name": "injaz-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test_api.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

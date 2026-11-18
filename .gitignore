@@ -12,3 +12,7 @@ INJAZ-online.url
 .env
 .env.*
 *.pem
+node_modules/
+public/
+.netlify/
+hosting-private.json
