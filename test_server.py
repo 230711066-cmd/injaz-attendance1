@@ -20,7 +20,14 @@ class ServerTest(unittest.TestCase):
             sock.bind(('127.0.0.1', 0))
             cls.port = sock.getsockname()[1]
         env = dict(os.environ, INJAZ_DB=str(Path(cls.temp.name)/'test.sqlite3'), PORT=str(cls.port))
-        env.pop('DATABASE_URL', None)
+        if getattr(cls, 'postgres', False):
+            if not os.environ.get('INJAZ_TEST_DATABASE_URL'):
+                cls.temp.cleanup()
+                raise unittest.SkipTest('PostgreSQL integration requires INJAZ_TEST_DATABASE_URL')
+            env['DATABASE_URL'] = os.environ['INJAZ_TEST_DATABASE_URL']
+            env['INJAZ_DB_SSLMODE'] = 'disable'
+        else:
+            env.pop('DATABASE_URL', None)
         env.pop('INJAZ_HTTPS', None)
         entry = getattr(cls, 'entry', 'server.py')
         args = ['--host', '127.0.0.1', '--port', str(cls.port)] if entry == 'server.py' else []
@@ -99,6 +106,9 @@ class ServerTest(unittest.TestCase):
 
 class WSGITest(ServerTest):
     entry = 'serve.py'
+
+class PostgresTest(WSGITest):
+    postgres = True
 
 if __name__ == '__main__':
     unittest.main()

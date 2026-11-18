@@ -32,7 +32,8 @@ def connect():
         import psycopg
         from psycopg.rows import dict_row
         # Secrets stay server-side. TLS protects the cloud database connection.
-        with psycopg.connect(os.environ['DATABASE_URL'], row_factory=dict_row, sslmode='require', connect_timeout=15, prepare_threshold=None) as connection:
+        sslmode = 'require' if os.environ.get('INJAZ_HTTPS') == '1' else os.environ.get('INJAZ_DB_SSLMODE', 'require')
+        with psycopg.connect(os.environ['DATABASE_URL'], row_factory=dict_row, sslmode=sslmode, connect_timeout=15, prepare_threshold=None) as connection:
             connection.execute('SET search_path TO injaz')
             try:
                 yield PostgresConnection(connection)
