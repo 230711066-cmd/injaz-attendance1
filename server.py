@@ -34,6 +34,9 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send(self, data, status=200, mime='application/json; charset=utf-8', cookie=None):
+        if getattr(self, '_defer_response', False):
+            self._pending_response = (data, status, mime, cookie)
+            return
         payload = json.dumps(data, ensure_ascii=False).encode() if mime.startswith('application/json') else data
         self.send_response(status)
         self.send_header('Content-Type', mime)
@@ -105,6 +108,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get('X-Injaz') != '1' or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             return self.send({'error': 'طلب غير مسموح.'}, 403)
+        # Acknowledge writes only after the database transaction has committed.
+        self._defer_response = True
+        self._pending_response = None
         try:
             size = int(self.headers.get('Content-Length', '0'))
             if not 0 < size <= 16384:
@@ -117,6 +123,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send({'error': 'راجع البيانات المدخلة.'}, 400)
         except sqlite3.IntegrityError:
             self.send({'error': 'رقم الموظف مستخدم مسبقاً.'}, 409)
+        except Exception:
+            self.send({'error': 'تعذر حفظ العملية. حاول مرة أخرى أو راجع الإدارة.'}, 503)
+        finally:
+            self._defer_response = False
+            if self._pending_response:
+                self.send(*self._pending_response)
 
     def post(self, path, body):
         with connect() as db:
