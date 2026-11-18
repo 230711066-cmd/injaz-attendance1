@@ -1,0 +1,14 @@
+*.sqlite3
+*.sqlite3-*
+*.log
+__pycache__/
+cloudflared.exe
+admin-login.txt
+online-url.txt
+online.lock
+INJAZ-QR.svg
+INJAZ-QR.html
+INJAZ-online.url
+.env
+.env.*
+*.pem
